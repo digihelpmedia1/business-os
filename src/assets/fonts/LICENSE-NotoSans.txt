@@ -1,0 +1,3 @@
+Noto Sans (NotoSans-Regular.ttf, NotoSans-SemiBold.ttf) — Copyright 2022 The Noto Project Authors.
+Licensed under the SIL Open Font License, Version 1.1 — https://openfontlicense.org
+Used to render the Indian rupee sign (₹) in generated PDF documents.

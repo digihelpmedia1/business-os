@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+.env
+.env*.local
+.env.production
+.local-db/
+.local-db.log
+*.log
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+storage/
+.DS_Store
+credentials*.txt
+
+# local-only CSS workaround artifacts
+src/app/_local-*.css
+.dev.log
