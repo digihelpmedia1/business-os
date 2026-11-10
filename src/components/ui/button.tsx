@@ -47,8 +47,21 @@ export function LinkButton({
   ...props
 }: { href: string; className?: string; children: React.ReactNode; target?: string; prefetch?: boolean } & VariantProps<typeof buttonVariants>) {
   return (
-    <Link href={href} className={cn(buttonVariants({ variant, size }), className)} {...props}>
-      {children}
-    </Link>
+    isFileOrExternal(href, props.target) ? (
+      // Downloads (CSV, PDF, backup) and external URLs must be full browser requests —
+      // Next's client router would fetch them as a page and show "page not found".
+      <a href={href} target={props.target} rel={props.target === "_blank" ? "noopener" : undefined} className={cn(buttonVariants({ variant, size }), className)}>
+        {children}
+      </a>
+    ) : (
+      <Link href={href} className={cn(buttonVariants({ variant, size }), className)} {...props}>
+        {children}
+      </Link>
+    )
   );
+}
+
+/** True for links that are not app pages: API routes (exports, PDFs, files), share PDFs, external URLs, new tabs. */
+export function isFileOrExternal(href: string, target?: string) {
+  return !!target || /^(https?:|mailto:|tel:)/.test(href) || href.startsWith("/api/") || /^\/share\/.+\/pdf/.test(href);
 }
