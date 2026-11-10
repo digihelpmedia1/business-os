@@ -22,3 +22,4 @@ src/app/_local-*.css
 
 .vercel
 .env*
+!.env.example
