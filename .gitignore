@@ -19,3 +19,6 @@ credentials*.txt
 # local-only CSS workaround artifacts
 src/app/_local-*.css
 .dev.log
+
+.vercel
+.env*

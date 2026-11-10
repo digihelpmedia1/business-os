@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.local-db
+.local-db.log
+.dev.log
+.next
+node_modules
+tsconfig.tsbuildinfo
+src/app/_local-*.css
