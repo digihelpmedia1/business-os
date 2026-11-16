@@ -11,7 +11,16 @@ import { addDays, fmtDate, todayIST } from "@/lib/dates";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { invoiceOutstanding, recalcInvoice } from "@/lib/finance/ledger";
 import { optStr, money, percent, quantity } from "@/lib/validators";
-import { getSettings } from "@/lib/settings";
+
+/**
+ * Company settings read through the SAME transaction connection. Never call the
+ * global client (getSettings/db) inside a transaction: in production each server
+ * function has a pool of one connection, so a second query would wait for the
+ * transaction to finish — a deadlock that ends in a transaction timeout.
+ */
+async function settingsTx(tx: Tx) {
+  return (await tx.companySettings.findUnique({ where: { id: 1 } })) ?? (await tx.companySettings.create({ data: { id: 1 } }));
+}
 
 // ───────────────────────── Shared line-item schema ─────────────────────────
 
@@ -85,7 +94,7 @@ export type InvoiceInput = z.infer<typeof invoiceSchema>;
 const GST_TYPES: InvoiceType[] = ["TAX_INVOICE", "CREDIT_NOTE", "DEBIT_NOTE", "PROFORMA", "ADVANCE"];
 
 async function prepareInvoice(tx: Tx, input: InvoiceInput) {
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const client = await tx.client.findFirst({ where: { id: input.clientId, deletedAt: null } });
   if (!client) throw new ActionError("Client not found.", { clientId: "Client not found" });
   if (input.type === "TAX_INVOICE" && (!settings.gstRegistered || !settings.gstin)) {
@@ -186,7 +195,7 @@ export async function issueInvoice(tx: Tx, id: string, userId: string | null) {
   const inv = await tx.invoice.findUnique({ where: { id }, include: { client: true } });
   if (!inv || inv.deletedAt) throw new ActionError("Invoice not found.");
   if (inv.status !== "DRAFT") throw new ActionError("This invoice has already been issued.");
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   if (inv.type === "TAX_INVOICE" && (!settings.gstRegistered || !settings.gstin)) {
     throw new ActionError("Add your GSTIN in Settings before issuing a GST tax invoice.");
   }
@@ -257,7 +266,7 @@ export async function recordPayment(tx: Tx, raw: z.input<typeof paymentSchema>, 
   if (settle.gt(outstanding.plus(0.009))) {
     throw new ActionError(`Amount + TDS (₹${settle.toFixed(2)}) exceeds the outstanding balance of ₹${outstanding.toFixed(2)}.`, { amount: "Exceeds outstanding" });
   }
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const receiptNumber = await nextDocumentNumber(tx, "RECEIPT", paymentDate, settings.fyStartMonth);
   const payment = await tx.payment.create({
     data: {
@@ -331,7 +340,7 @@ export const quoteSchema = z.object({
 export type QuoteInput = z.infer<typeof quoteSchema>;
 
 async function prepareQuote(tx: Tx, input: QuoteInput) {
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const client = await tx.client.findFirst({ where: { id: input.clientId, deletedAt: null } });
   if (!client) throw new ActionError("Client not found.", { clientId: "Client not found" });
   const issueDate = new Date(`${input.issueDate}T00:00:00.000Z`);
@@ -399,7 +408,7 @@ export async function duplicateQuote(tx: Tx, id: string, userId: string, asVersi
   const q = await tx.quote.findUnique({ where: { id }, include: { items: true, nextVersion: true } });
   if (!q) throw new ActionError("Document not found.");
   if (asVersion && q.nextVersion) throw new ActionError("A newer version already exists — revise the latest version.");
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const today = todayIST();
   let number: string;
   if (asVersion) {
@@ -461,7 +470,7 @@ export async function convertQuoteToInvoice(tx: Tx, id: string, userId: string) 
   if (!q) throw new ActionError("Document not found.");
   if (q.status !== "ACCEPTED") throw new ActionError("Only accepted documents can be converted into an invoice.");
   if (q.convertedInvoiceId) throw new ActionError("This document was already converted to an invoice.");
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const type: InvoiceType = settings.gstRegistered && settings.gstin ? "TAX_INVOICE" : "NON_GST";
   const today = todayIST();
   const invoice = await createInvoice(
@@ -505,7 +514,7 @@ export async function convertAdvanceToInvoice(tx: Tx, id: string, userId: string
   if (!inv) throw new ActionError("Invoice not found.");
   if (!["PROFORMA", "ADVANCE"].includes(inv.type)) throw new ActionError("Only proforma or advance invoices can be converted.");
   if (inv.status === "DRAFT" || inv.status === "CANCELLED") throw new ActionError("Issue the proforma first.");
-  const settings = await getSettings();
+  const settings = await settingsTx(tx);
   const type: InvoiceType = settings.gstRegistered && settings.gstin ? "TAX_INVOICE" : "NON_GST";
   const today = todayIST();
   const created = await createInvoice(
